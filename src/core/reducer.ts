@@ -71,6 +71,7 @@ export function initState(genesis: EventEnvelope, snapshot?: CoreState): CoreSta
     // on staging 2026-08-12: screen.v2's dials were unknown to the Aug-11 sidecar).
     snapshot.dials = { ...GENESIS_DIALS, ...snapshot.dials }
     snapshot.attestations ??= {} // a sidecar cut before Amendment 1 was amended carries none
+    snapshot.revokedCredentials ??= {} // …and one cut before ALIAS_REVOKED (2026-08-19) carries none
     return snapshot
   }
 
@@ -88,6 +89,7 @@ export function initState(genesis: EventEnvelope, snapshot?: CoreState): CoreSta
     attestations: {},
     houses: {},
     credentialToHouse: {},
+    revokedCredentials: {},
     acts: {},
     challenges: {},
     raids: {},
@@ -197,6 +199,23 @@ export function validate(state: CoreState, e: Pick<EventEnvelope, "kind" | "v" |
       if (!str(p, "key") || p.value === undefined) return "DIAL_SET needs key and value"
       return null
     }
+    case "ALIAS_REVOKED": {
+      // A house closes one of its own credentials. The HOUSE key signs: this is a household
+      // deciding which keys still open its door, not an office reaching in.
+      const cred = str(p, "credentialHash")
+      if (!cred) return "credentialHash required"
+      const houseActor = state.actors[e.actor]
+      if (!houseActor || houseActor.entityType !== "house") return "a credential is revoked by its own house key"
+      const claimed = state.credentialToHouse[cred]
+      if (!claimed) return "no such credential — nothing to revoke"
+      if (claimed !== houseActor.entityId) return "that credential backs another house"
+      if (state.revokedCredentials[cred]) return "already revoked"
+      // The LAST credential may not be revoked: a house with no way in is a house nobody can
+      // ever re-enter, and there is no path back because the sybil map refuses a re-claim.
+      const live = (state.houses[claimed]?.credentialHashes ?? []).filter(c => !state.revokedCredentials[c])
+      if (live.length <= 1) return "this is the house's last credential — revoking it would lock the house permanently"
+      return null
+    }
     case "ENTITY_REGISTERED": {
       if (state.actors[e.actor]) return "entity already registered"
       const t = str(p, "entityType")
@@ -239,7 +258,15 @@ export function validate(state: CoreState, e: Pick<EventEnvelope, "kind" | "v" |
       const house = state.houses[houseId]
       if (!house) return "no such house"
       if (e.actor !== house.keyFp) return "an alias is added by the house's own key"
-      if (state.credentialToHouse[cred]) return "this credential already backs a house"
+      // Law 38 cares that a credential backs ONE house, not that it may never be re-attached to
+      // the house it already belongs to. Re-linking to the SAME house creates no second house and
+      // so violates nothing — and without it a revocation is permanent, because the claim outlives
+      // the revocation by design. That made ALIAS_REVOKED an amputation rather than a switch:
+      // revoke a wallet by mistake and it could never come back, not even here.
+      // A widening, so it refuses nothing a stricter past accepted.
+      const backs = state.credentialToHouse[cred]
+      if (backs && backs !== houseId) return "this credential already backs another house"
+      if (backs === houseId && !state.revokedCredentials[cred]) return "this credential already opens this house"
       return null
     }
     case "AGENT_MINTED": {
@@ -638,6 +665,14 @@ export function applyEvent(state: CoreState, e: EventEnvelope): Outcome {
       sweepNudges(state, e.ts, notes)
       sweepScreensV2(state, e, notes) // sealed screens: draws, window closes, parking (no-op under v1)
       break
+    case "ALIAS_REVOKED": {
+      const cred = str(p, "credentialHash")!
+      // credentialToHouse is deliberately NOT touched: the claim stands forever so the same
+      // human can never found a second house on it. Only the ability to sign in ends here.
+      state.revokedCredentials[cred] = { houseId: state.credentialToHouse[cred], atSeq: e.seq }
+      notes.push(`credential revoked — access closed, the Law 38 claim stands`)
+      break
+    }
     case "DIAL_SET":
       state.dials[str(p, "key")!] = p.value as number | string | boolean
       notes.push(`dial ${str(p, "key")}`)
@@ -657,8 +692,14 @@ export function applyEvent(state: CoreState, e: EventEnvelope): Outcome {
     }
     case "HOUSE_ALIAS_ADDED": {
       const house = state.houses[str(p, "houseId")!]
-      house.credentialHashes.push(str(p, "credentialHash")!)
-      state.credentialToHouse[str(p, "credentialHash")!] = house.id
+      const cred = str(p, "credentialHash")!
+      // A re-link is the same credential returning, not a new one arriving: list it once.
+      if (!house.credentialHashes.includes(cred)) house.credentialHashes.push(cred)
+      state.credentialToHouse[cred] = house.id
+      if (state.revokedCredentials[cred]) {
+        delete state.revokedCredentials[cred] // the door opens again; the claim never moved
+        notes.push("credential restored — a revocation is a switch, not an amputation")
+      }
       break
     }
     case "AGENT_MINTED": {

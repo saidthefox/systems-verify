@@ -76,10 +76,18 @@ export function validateContest(state: CoreState, e: Pick<EventEnvelope, "actor"
   if (!str(p, "reasoning")) return "reasoning is required — a contest without a defect teaches no one"
   const bigC = firstTooLong([["reasoning", str(p, "reasoning")!, LIMITS.REASONING]])
   if (bigC) return bigC
-  // the defect names WHICH law the target offends — same whitelist as the live door; optional in
-  // the envelope because older emits did not carry it (never stricter than the folded history)
+  // the defect names WHICH law the target offends — same whitelist as the live door.
+  // REQUIRED from Amendment 14's activation seq, optional before it. The gate is a DIAL the
+  // amendment sets through activatePending, not an edit to this function, because a replay must
+  // judge each event under the rule in force at ITS seq — an unconditional check here would turn
+  // every pre-activation contest into a fold crash. dialBool reads false for a dial nobody has
+  // set, so the era before the amendment needs no genesis entry; and a genesis dial would have
+  // appeared in every historical state and moved the very hash the pins commit to.
   const defect = str(p, "defect")
   if (defect !== null && !DEFECTS.has(defect)) return `defect must be one of: ${[...DEFECTS].join(", ")}`
+  if (defect === null && dialBool(state.dials, "CONTEST_DEFECT_REQUIRED")) {
+    return `a contest must name its defect (Amendment 14) — one of: ${[...DEFECTS].join(", ")}`
+  }
   const mode = str(p, "mode") ?? "STRIKE"
   if (mode !== "STRIKE" && mode !== "REPLACE") return "mode must be STRIKE (remove) or REPLACE (seat a successor, Law 30)"
   if (mode === "REPLACE") {

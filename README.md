@@ -1,8 +1,11 @@
 # systema-verify
 
-Verify the [Systema Constructum](https://systema.quartermachines.website) record yourself.
+Check the [Systema Constructum](https://systema.quartermachines.website) record yourself, without
+trusting the people who keep it.
 
-    npx tsx verify.ts https://systema.quartermachines.website/log
+    git clone https://github.com/saidthefox/systems-verify
+    cd systems-verify && npm install
+    ./bin/systema-verify https://systema.quartermachines.website/log
 
 ## Why this exists
 
@@ -10,48 +13,57 @@ Every other check on that system is run by its operator, on the operator's machi
 operator's copy. That can prove the kingdom is self-consistent. It cannot prove the operator is
 honest, because the same person holds the record and the ruler.
 
-This closes that gap. It fetches the published record, folds it with the published law, and checks
-the result against an anchor on World Chain that the keeper cannot rewrite.
+This closes that. It fetches the published record, folds it with the published law, and compares
+the result against a digest held in a **World Chain contract the keeper cannot rewrite**.
 
 ## What it proves, in order
 
 Each step refuses to continue if the one before it failed.
 
 1. **bytes** — every artifact matches the sha256 the manifest promised
-2. **record** — the hash chain, the per-actor puddles, and every recomputed envelope hash
+2. **record** — the hash chain, the per-actor puddles, every recomputed envelope hash
 3. **law** — every event re-validates under the reducer. A log that folds is a log whose every act
    was lawful *under the rules in force at its own sequence number*
 4. **signatures** — from `SIGS_FROM_SEQ` onward, enforced whether or not you asked for it
-5. **anchor** — the folded state hashes to the value the World Chain checkpoint commits to
+5. **anchor** — the folded state's digest is read back **off World Chain** and compared
 
-## What it does not prove, and says so on every run
+Step 5 is the one that matters, and it is on by default. The contract address is compiled into
+this tool rather than read from the record, because a publisher who could name their own anchor
+could anchor anything. Check it once yourself:
 
-- **The genesis snapshot.** The log begins from a committed state rather than from nothing. The
-  sidecar's hash is checked against GENESIS and against the anchor, so nobody can swap it — but
-  what it *asserts* about the era before the log is vouched for, not replayed. That is the one
-  trust seam in the system, and this tool names it every time rather than letting you assume past it.
-- **That you were served a complete record.** A publisher can always show a shorter prefix. Only an
-  anchor whose sequence exceeds the head you were given can catch that, which is why the on-chain
-  check matters more than anything this tool does locally.
+- chain: World Chain mainnet (id `480`)
+- contract: `0x0EFa83693F6c64683B6E4a601BfB6dcfb6BCc720`
+- call: `headAt(<height>)` returns the digest pinned at that height
 
-## The law is the dependency
+`--rpc <url>` points at a different node; `--no-chain` skips the network entirely and says so
+in the output.
 
-`src/core/` is the reducer itself — the same code the kingdom runs, not a reimplementation. That is
-deliberate: a verifier written twice is two guesses, and the interesting question is whether the
-*published* rules produce the *published* state.
+## What it does NOT prove, and says so every run
 
-It has **no npm dependencies**. Node's `crypto` and nothing else, so the whole thing is auditable
-in an afternoon.
+- **The genesis snapshot.** The log begins from a committed state, not from nothing. Its bytes are
+  hash-checked and covered by the pin, so nobody can swap it — but what it *asserts* about the
+  pre-log era is vouched for, not replayed. That is the system's one trust seam and it is named
+  on every run rather than buried here.
+- **That you were served the whole record.** A publisher can always show a shorter prefix. Only an
+  anchor whose seq exceeds the head you hold can catch that.
 
-## Exit codes
+## If it says the record is INVALID
 
-`0` verified · `1` a check failed · `2` the tool could not run
+Check the line about `codeHash` first. This package carries a copy of the kingdom's reducer, and a
+copy that has fallen behind will refuse events that were lawful when they were written. The tool
+compares its own law against the rulebook that computed the pin and tells you when they differ —
+an "unknown event kind" is a stale verifier far more often than it is a bad record.
 
-## Also works on a local copy
+The law in this package hashes to:
 
-    npx tsx verify.ts ./my-mirror
+    1b8fbbb2066dc45b82e1b734255b99a8c702f40e6d206e7eebdf2027d4b17e9b
 
-It reads either shape: a published directory (manifest + segments) or a plain
-`events.jsonl` + `genesis-state.json` as an operator or mirror holds it.
+## This directory is generated
+
+It is built from the main repository by `tools/build-verify-pkg.ts`, which also runs as a guard
+(`--check`) that fails when this copy has drifted. Do not edit `src/` or `verify.ts` here — fix
+them in the source repository and rebuild, or the two copies of the law start disagreeing again.
+That has already happened once: a hand-made copy went stale in four hours and called a healthy
+kingdom forged.
 
 MIT.

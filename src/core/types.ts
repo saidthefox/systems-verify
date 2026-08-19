@@ -208,7 +208,16 @@ export interface CoreState {
    *  anchoring idempotent, exactly as the chain's one-block-per-act rule did. */
   attestations: Record<string, Attestation>
   houses: Record<string, House>
+  /** EVERY credential that has ever claimed a house — Law 38's sybil binding. Append-only on
+   *  purpose: if a claim could be forgotten, the same human could unlink and found a second
+   *  house, and one-human-one-house would stop meaning anything. */
   credentialToHouse: Record<string, string>
+  /** …and the ones that no longer OPEN their house (ALIAS_REVOKED, 2026-08-19). The two facts
+   *  are different and were previously conflated: "has ever been claimed" is permanent, "may be
+   *  used to sign in" is not. Keeping them apart is what lets a credential be revoked without
+   *  weakening the sybil rule — and lets the diff be exact instead of carrying an uncounted line
+   *  that hid a revocation and a projector bug behind the same number. */
+  revokedCredentials: Record<string, { houseId: string; atSeq: number }>
   acts: Record<string, ActState>
   challenges: Record<string, Challenge>
   raids: Record<string, Raid>

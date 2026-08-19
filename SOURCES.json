@@ -1,0 +1,22 @@
+{
+  "generatedBy": "tools/build-verify-pkg.ts",
+  "codeHash": "1b8fbbb2066dc45b82e1b734255b99a8c702f40e6d206e7eebdf2027d4b17e9b",
+  "files": {
+    "src/core/canonical.ts": "fd91f6e935949587e6458d4cba30fe26867ecd6ed2c0486d9cf7e16d3c89efb0",
+    "src/core/dials.ts": "eee2034087ed57de9d112514e5ae152b72f3dd4e15530a5d7f6cd7e1eed504ba",
+    "src/core/effects.ts": "b12cb94f2f24c8c75d83306864d7f40b15cf32716e4144cf97813f6e072f6727",
+    "src/core/graph.ts": "b7d302f46e738a7d3fa5be76a925bc60ac608fb67cfed0717262d782ce9b83ea",
+    "src/core/index.ts": "dc3a40428f71e51e2b7aa739cc9f907e47761a84a886ba4fb321f215f8aaefd2",
+    "src/core/invariants.ts": "15811af78385765cf553f061ff93fa09a66027b9c10df3e00428b26ede3ee613",
+    "src/core/ladder.ts": "d41f48a1f34f92ed2d034c7a26fd47428a742de06ad2e78bcdd4e7386d1a8fa7",
+    "src/core/limits.ts": "a4119745fc19ba53942560ce7bb58b62b2c79eb1928883e859eb32f5a36c40de",
+    "src/core/math.ts": "e0f5669b6ff9dae1f8f6b57592391d7a43a88c7892f20cd0fe03423fcfaeeb8c",
+    "src/core/reducer.ts": "9773f4956b63c0e6708dec468a3b5fa8184e37eed8c0bb1b6d81fa53dd3d9944",
+    "src/core/sequencer.ts": "17029a186295223146d0366f7bd46215ffa5cc49e3c20e116a806cdff6dde4aa",
+    "src/core/sortition.ts": "0f561ce8f6cccf78acca25b61bdd957584de33d3f2b37588e687b88727d0dc65",
+    "src/core/types.ts": "5ec38199e3bda6f8f29839f2c3774cac632ce391e19c0cd5c6a7a4afbad31db8",
+    "src/core/verify.ts": "60f7e241d07d4b4c7381f22cebcf0e18bcbedcb30dbfa21405c13d3789cd05f6",
+    "src/codec.ts": "79c846de1fe87aa30fe07d602f328ac7d2f570655f1ad831c4a4b57217a25cbc",
+    "verify.ts": "6b70fb31375d05c60b17fd52790317df132f66c622e6c4f3e874c16d0d46e1bc"
+  }
+}
