@@ -1,0 +1,10 @@
+{
+  "name": "systema-verify",
+  "version": "1.0.0",
+  "description": "Verify the Systema Constructum record — fold the published log with the published law and check it against a World Chain anchor.",
+  "bin": { "systema-verify": "verify.ts" },
+  "scripts": { "verify": "tsx verify.ts" },
+  "license": "MIT",
+  "dependencies": {},
+  "devDependencies": { "tsx": "^4.0.0", "typescript": "^5.0.0" }
+}
