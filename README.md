@@ -47,16 +47,33 @@ in the output.
 - **That you were served the whole record.** A publisher can always show a shorter prefix. Only an
   anchor whose seq exceeds the head you hold can catch that.
 
-## If it says the record is INVALID
+## Three verdicts, not two
 
-Check the line about `codeHash` first. This package carries a copy of the kingdom's reducer, and a
-copy that has fallen behind will refuse events that were lawful when they were written. The tool
-compares its own law against the rulebook that computed the pin and tells you when they differ —
-an "unknown event kind" is a stale verifier far more often than it is a bad record.
+| exit | verdict | means |
+|---|---|---|
+| 0 | `VERIFIED` | the bytes, the record, the law, the signatures and the anchor all hold |
+| 1 | `FAILED` | a finding **about the record** |
+| 2 | error | the run itself broke (network, bad path) |
+| 3 | `INCONCLUSIVE` | **this tool is too old to judge that record** |
+
+The third one exists because this package carries a copy of the kingdom's reducer, and a copy goes
+stale on its own: the law gains an event kind, your clone does not have it, and folding stops. That
+is a fact about your copy — the kingdom's sequencer accepted the event under a rulebook that knows
+the kind — so the tool abstains instead of accusing. **`INCONCLUSIVE` is not a pass**, and no
+record can reach `VERIFIED` through it. Fix it with `git pull && npm install`.
+
+This matters more than it sounds. Every other failure mode here is loud and immediate; this one is
+silent, arrives on its own schedule, and would otherwise make a correct record look forged to the
+exact person who came to check whether it was.
 
 The law in this package hashes to:
 
     1b8fbbb2066dc45b82e1b734255b99a8c702f40e6d206e7eebdf2027d4b17e9b
+
+Compare that against `pin.codeHash` in any published `manifest.json`. Equal means you hold the
+rulebook that computed that pin. **Different is not automatically wrong** — the kingdom's law moves
+between pins, and re-deriving the same digest under a different rulebook is a stronger result than
+agreement, which the tool will say when it happens.
 
 ## This directory is generated
 

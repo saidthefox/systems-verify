@@ -17,6 +17,6 @@
     "src/core/types.ts": "5ec38199e3bda6f8f29839f2c3774cac632ce391e19c0cd5c6a7a4afbad31db8",
     "src/core/verify.ts": "60f7e241d07d4b4c7381f22cebcf0e18bcbedcb30dbfa21405c13d3789cd05f6",
     "src/codec.ts": "79c846de1fe87aa30fe07d602f328ac7d2f570655f1ad831c4a4b57217a25cbc",
-    "verify.ts": "6b70fb31375d05c60b17fd52790317df132f66c622e6c4f3e874c16d0d46e1bc"
+    "verify.ts": "27f934bc09b590153bab199e426c85f2e1af77408707429d884ad8e1732dfb30"
   }
 }

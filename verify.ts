@@ -114,6 +114,20 @@ function ownCodeHash(): string | null {
 }
 
 /**
+ * Is this failure about the RECORD, or about the tool holding the ruler?
+ *
+ * Exactly one class of fold failure is unambiguously the tool's: a kind the reducer has never
+ * heard of. Every event in a published log was accepted by a sequencer running SOME rulebook, so
+ * an unknown kind means this copy predates that rulebook — never that the event is forged. A
+ * forger gains nothing by triggering it: the verdict it produces is INCONCLUSIVE, not a pass.
+ *
+ * Kept deliberately narrow. Widening this to other refusals would start excusing real findings,
+ * which is the same mistake pointed the other way — and far worse in a tool whose whole value is
+ * being believed when it says no.
+ */
+export const staleLaw = (reason?: string): boolean => /unknown event kind/.test(reason ?? "")
+
+/**
  * Say, in one line, how the law in this copy relates to the law that computed the pin — and read
  * the SAME fact in opposite directions depending on whether the fold agreed, because it means
  * opposite things.
@@ -231,7 +245,14 @@ async function verifyPlainDir(dir: string, opts: { rpcUrl: string | null }): Pro
 
   console.log("\n2. the record, the law, the signatures")
   const v = verifyLog(events, { snapshot: snap() })
-  if (!v.valid) { bad(`INVALID at seq ${v.failedAt}: ${v.reason}`); failures++ }
+  let inconclusive: string | null = null
+  if (!v.valid && staleLaw(v.reason)) {
+    // Same abstention as the published path — an operator checking their own mirror deserves the
+    // same distinction between "your copy of the record is bad" and "your copy of the law is old".
+    inconclusive = `${v.reason} (at seq ${v.failedAt})`
+    bad(`cannot fold this record: ${v.reason}`)
+    note("This says the TOOL is out of date, not that the record is bad — update and re-run.")
+  } else if (!v.valid) { bad(`INVALID at seq ${v.failedAt}: ${v.reason}`); failures++ }
   else ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
 
   console.log("\n3. the anchor")
@@ -240,6 +261,10 @@ async function verifyPlainDir(dir: string, opts: { rpcUrl: string | null }): Pro
   if (!receipts.length) console.log("  – no checkpoint receipts here; nothing ties this copy to an outside witness")
   for (const r of receipts) {
     const p = JSON.parse(readFileSync(join(ckDir, r), "utf8")) as NonNullable<Manifest["pin"]>
+    if (inconclusive && p.seq >= (v.failedAt ?? Infinity)) {
+      console.log(`  – pin at seq ${p.seq} skipped: past an event this tool cannot fold`)
+      continue
+    }
     const bounded = events.filter(e => e.seq <= p.seq)
     const { state } = fold(bounded, snap())
     failures += await checkAnchor(p, { stateHash: stateHashOf(state), logHash: bounded[bounded.length - 1].hash }, opts)
@@ -248,6 +273,11 @@ async function verifyPlainDir(dir: string, opts: { rpcUrl: string | null }): Pro
   console.log("\nwhat this run did NOT prove:")
   console.log("  · the genesis SNAPSHOT — vouched for, not replayed. The system's one trust seam.")
   console.log("  · that this copy is COMPLETE. Only an anchor newer than your head can catch a short copy.")
+  if (inconclusive) {
+    console.log(`\nINCONCLUSIVE — this copy of the verifier is older than the record it was asked to check.`)
+    console.log(`  ${inconclusive}`)
+    process.exit(3)
+  }
   console.log(failures ? `\nFAILED — ${failures} problem(s).` : "\nVERIFIED.")
   process.exit(failures ? 1 : 0)
 }
@@ -267,6 +297,8 @@ async function main() {
 
   console.log(`systema-verify — ${base}\n`)
   let failures = 0
+  /** Set when the fold stops for a reason that is about THIS TOOL, not the record. */
+  let inconclusive: string | null = null
 
   // TWO SHAPES, one tool. A PUBLISHED directory has a manifest and segments; an OPERATOR (or
   // mirrored) directory is a plain events.jsonl + genesis-state.json. `mirror.ts` produces the
@@ -313,19 +345,30 @@ async function main() {
   console.log("\n2. the record, the law, the signatures")
   // initState MUTATES its snapshot, so the fold below gets its own parse.
   const v = verifyLog(events, { snapshot: manifest.genesis ? stateFromJson((await get(base, manifest.genesis.file)).toString()) : undefined })
-  if (!v.valid) {
+  if (!v.valid && staleLaw(v.reason)) {
+    // NOT A FINDING. AN ABSTENTION.
+    //
+    // An unknown event kind is a statement about THIS TOOL and can never be a statement about
+    // the record: the kingdom's sequencer accepted that event under a rulebook that knows the
+    // kind, and this copy of the reducer does not. Reporting it as INVALID would be a published
+    // accusation, made by the keeper's own tool, against the record it exists to defend — read
+    // by the one audience with no way to tell the instrument from the subject.
+    //
+    // This is the failure mode that cannot be repaired after publication: clones already in the
+    // wild go stale on their own, silently, the next time a new kind is ratified. So the verdict
+    // has three values, not two. Nothing here is a pass — INCONCLUSIVE exits non-zero (3) and no
+    // forger gains anything by it, because no record can reach VERIFIED this way.
+    inconclusive = `${v.reason} (at seq ${v.failedAt})`
+    bad(`cannot fold this record: ${v.reason}`)
+    note("This says the TOOL is out of date, not that the record is bad. The kingdom accepted that")
+    note("event under a rulebook that knows the kind; this copy does not, so it is not entitled to")
+    note("an opinion about it.  Update and re-run:  git pull && npm install")
+  } else if (!v.valid) {
     bad(`INVALID at seq ${v.failedAt}: ${v.reason}`); failures++
-    // BLAME THE RIGHT PARTY. A verifier whose src/core is behind the kingdom's refuses events
-    // that were lawful when they were written, and the honest reading of that is "this copy of
-    // the law is old", not "this record is forged". Say so before the stranger draws the wrong
-    // conclusion — an unknown event kind is that failure almost every time.
     const mine = ownCodeHash()
     if (manifest.pin?.codeHash && mine && mine !== manifest.pin.codeHash) {
       note("BUT your copy of the law is NOT the one that computed this record's pin — update this")
       note("tool before reading the line above as a finding about the kingdom.")
-    } else if (/unknown event kind/.test(v.reason ?? "")) {
-      note("an UNKNOWN EVENT KIND is almost always a stale verifier, not a bad record: the kingdom")
-      note("has since learned a kind this copy of the reducer has never heard of. Update and re-run.")
     }
   } else ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
 
@@ -333,6 +376,10 @@ async function main() {
   console.log("\n3. the anchor")
   if (!manifest.pin) {
     console.log("  – no checkpoint published; nothing ties this to an outside witness")
+  } else if (inconclusive && manifest.pin.seq >= (v.failedAt ?? Infinity)) {
+    // The pin sits at or past the event this tool cannot read, so folding to it would throw. Not
+    // a failure to report — a question this copy is not equipped to ask.
+    console.log("  – skipped: the pin is at seq " + manifest.pin.seq + ", past an event this tool cannot fold")
   } else {
     const p = manifest.pin
     const bounded = events.filter(e => e.seq <= p.seq)
@@ -349,8 +396,23 @@ async function main() {
   console.log("  · that you were served the whole record. A publisher can always show a short prefix;")
   console.log("    only an anchor older than the head you hold can catch that. Check the pin on-chain.")
 
+  // THREE VERDICTS. 0 verified · 1 the record failed · 2 the run broke · 3 this tool abstains.
+  // The third exists because the second is an accusation, and a tool that has fallen behind the
+  // law has not earned one.
+  if (inconclusive) {
+    console.log(`\nINCONCLUSIVE — this copy of the verifier is older than the record it was asked to check.`)
+    console.log(`  ${inconclusive}`)
+    console.log("  Nothing above is a finding against the kingdom, and nothing above is a pass.")
+    process.exit(3)
+  }
   console.log(failures ? `\nFAILED — ${failures} problem(s).` : "\nVERIFIED.")
   process.exit(failures ? 1 : 0)
 }
 
-main().catch(e => { console.error(`\nerror: ${e instanceof Error ? e.message : e}`); process.exit(2) })
+// Importable, so the abstention rule can be tested without running the whole tool. ESM hoists
+// imports above any setup a test file does, so the guard has to recognise the runner itself
+// rather than rely on the test setting a variable first.
+export { main }
+if (process.env.SYSTEMA_VERIFY_NO_AUTORUN !== "1" && !process.env.VITEST) {
+  main().catch(e => { console.error(`\nerror: ${e instanceof Error ? e.message : e}`); process.exit(2) })
+}
