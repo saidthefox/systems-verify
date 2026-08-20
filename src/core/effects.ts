@@ -19,19 +19,36 @@ export const softHardF = (state: CoreState): bigint =>
  *  transcribe into rows — per-vote payouts, per-stake settlements — recorded as the reducer
  *  applies them. NOT part of state identity (never hashed, never validated); reset per event
  *  by applyEvent. The reducer decides; the projector transcribes; nothing recomputes.  */
-export interface Fx {
-  t: "vote" | "vote-void" | "stake" | "act-status" | "screen-status" | "holdback" | "rep"
-  key?: string; fp?: string; payoutMilli?: bigint; stakeMilli?: bigint; side?: string; amountBase?: bigint; payoutBase?: bigint
-  id?: string; kind?: string; status?: string; released?: boolean
-}
+export type Fx =
+  | { t: "vote"; targetType: string; targetId: string; fp: string; payoutMilli: bigint; stakeMilli: bigint }
+  | { t: "vote-void"; targetType: string; targetId: string; fp: string }
+  | { t: "stake"; targetType: string; targetId: string; fp: string; side: string; amountBase: bigint; payoutBase: bigint; placedSeq: number }
+  | { t: "act-status"; id: string; kind: string; status: string }
+  | { t: "act-sync"; id: string; kind: string }
+  | { t: "screen-status"; id: string; kind: string; status: string }
+  | { t: "holdback"; id: string; kind: string; status: string }
+  | { t: "rep"; fp: string }
 let FX: Fx[] | null = null
 export function beginFx() { FX = [] }
 export function takeFx(): Fx[] { const out = FX ?? []; FX = null; return out }
 const fx = (e: Fx) => { if (FX) FX.push(e) }
 /** Status-change fx, callable from the ladder too. */
-export const fxStatus = (t: "act-status" | "screen-status" | "holdback", id: string, kind: string, status: string) => fx({ t, id, kind, status })
+export const fxStatus = (t: "act-status" | "screen-status" | "holdback", id: string, kind: string, status: string) => {
+  if (t === "act-status") fx({ t, id, kind, status })
+  else if (t === "screen-status") fx({ t, id, kind, status })
+  else fx({ t, id, kind, status })
+}
+/** An act's non-status shape changed (REPLACE re-points edges and transfers labels). */
+export const fxActSync = (id: string, kind: string) => fx({ t: "act-sync", id, kind })
 /** Mark an actor's reputation as touched — the door syncs the row from folded state. */
 export const fxRep = (fp: string) => fx({ t: "rep", fp })
+
+/** targetType never contains a colon; targetId is deliberately opaque and may contain many. */
+const targetFromKey = (key: string) => {
+  const colon = key.indexOf(":")
+  if (colon < 1) throw new Error(`invalid target key ${key}`)
+  return { targetType: key.slice(0, colon), targetId: key.slice(colon + 1) }
+}
 
 /** Settle a vote market at its outcome and close it. Deterministic order; supply-exact. */
 export function settleMarketVotes(state: CoreState, key: string, outcome: "ACCEPTED" | "REJECTED", fPermille: bigint) {
@@ -42,7 +59,7 @@ export function settleMarketVotes(state: CoreState, key: string, outcome: "ACCEP
     const judge = state.actors[fp]
     judge.repMilli += settlement.deltasMilli[fp]
     judge.openStakeMilli -= market[fp].stakeMilli
-    fx({ t: "vote", key, fp, payoutMilli: settlement.deltasMilli[fp], stakeMilli: market[fp].stakeMilli })
+    fx({ t: "vote", ...targetFromKey(key), fp, payoutMilli: settlement.deltasMilli[fp], stakeMilli: market[fp].stakeMilli })
     fxRep(fp)
   }
   state.supply.repMintedMilli += settlement.mintedMilli
@@ -56,7 +73,7 @@ export function refundMarketVotes(state: CoreState, key: string) {
   if (!market) return
   for (const fp of Object.keys(market)) {
     state.actors[fp].openStakeMilli -= market[fp].stakeMilli
-    fx({ t: "vote-void", key, fp })
+    fx({ t: "vote-void", ...targetFromKey(key), fp })
   }
   delete state.votes[key]
 }
@@ -72,7 +89,7 @@ export function settleOpenStakes(state: CoreState, key: string, outcome: "ACCEPT
     s.status = "SETTLED"
     s.payoutBase = payouts[i]
     if (payouts[i] > 0n) state.actors[s.fp].balanceBase += payouts[i]
-    fx({ t: "stake", key, fp: s.fp, side: s.side, amountBase: s.amountBase, payoutBase: payouts[i] })
+    fx({ t: "stake", ...targetFromKey(key), fp: s.fp, side: s.side, amountBase: s.amountBase, payoutBase: payouts[i], placedSeq: s.placedSeq })
   })
   state.supply.escrowPoolBase -= paidBase
   notes.push(`settled ${open.length} stakes`)
@@ -89,7 +106,7 @@ export function refundOpenStakes(state: CoreState, key: string, side: "ATTEST" |
     s.payoutBase = s.amountBase
     state.actors[s.fp].balanceBase += s.amountBase
     state.supply.escrowPoolBase -= s.amountBase
-    fx({ t: "stake", key, fp: s.fp, side: s.side, amountBase: s.amountBase, payoutBase: s.amountBase })
+    fx({ t: "stake", ...targetFromKey(key), fp: s.fp, side: s.side, amountBase: s.amountBase, payoutBase: s.amountBase, placedSeq: s.placedSeq })
   }
 }
 

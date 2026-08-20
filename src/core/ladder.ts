@@ -6,7 +6,7 @@ import { dialBig, dialBool, dialNum } from "./dials"
 import { activeJudges, quorumCrossing, quorumMinJudges } from "./math"
 import { drawJury, drawSeed, eligibleJurors, jurySize, nextSeed } from "./sortition"
 import {
-  freeName, fxRep, fxStatus, refundMarketVotes, refundOpenStakes, ruleProvisionalAct, settleMarketVotes,
+  freeName, fxActSync, fxRep, fxStatus, refundMarketVotes, refundOpenStakes, ruleProvisionalAct, settleMarketVotes,
   settleOpenStakes, softHardF, strikeConfirmed, supersedeReplaced,
 } from "./effects"
 
@@ -427,10 +427,12 @@ function teardownReplacedEntry(state: CoreState, c: Challenge, old: ActState, su
         else dep.orphaned = true
         refundOpenStakes(state, targetKey("EDGE", dep.id), "BOTH")
         dep.status = "REJECTED"
+        fxStatus("act-status", dep.id, dep.kind, "REJECTED")
         notes.push(`edge ${dep.id} removed (would collide after re-pointing)`)
       } else {
         dep.fromEntryId = from
         dep.toEntryId = to
+        fxActSync(dep.id, dep.kind)
         notes.push(`edge ${dep.id} re-pointed to ${succId}`)
       }
       continue
@@ -441,6 +443,7 @@ function teardownReplacedEntry(state: CoreState, c: Challenge, old: ActState, su
       else dep.orphaned = true // its author wasn't wrong — the construct got a better carving
       refundOpenStakes(state, targetKey("DEFINITION", dep.id), "BOTH")
       dep.status = "REJECTED"
+      fxStatus("act-status", dep.id, dep.kind, "REJECTED")
       notes.push(`definition ${dep.id} ${dep.orphaned ? "orphaned" : "voided"}`)
       continue
     }
@@ -448,11 +451,13 @@ function teardownReplacedEntry(state: CoreState, c: Challenge, old: ActState, su
     if (dep.kind === "LABEL" && dep.entryId === old.id) {
       if (dep.status === "ACCEPTED") {
         dep.entryId = succId // the word transfers; the names map already points at this act
+        fxActSync(dep.id, dep.kind)
         notes.push(`label ${dep.id} transferred to ${succId}`)
       } else {
         refundMarketVotes(state, targetKey("LABEL", dep.id))
         refundOpenStakes(state, targetKey("LABEL", dep.id), "BOTH")
         dep.status = "REJECTED"
+        fxStatus("act-status", dep.id, dep.kind, "REJECTED")
         freeName(state, dep)
         notes.push(`label ${dep.id} voided`)
       }
@@ -468,6 +473,7 @@ function teardownReplacedEntry(state: CoreState, c: Challenge, old: ActState, su
       contentHash: `alias:${c.id}`, entryId: succId, nameNorm: old.nameNorm,
       ruling: { status: "ACCEPTED", atSeq: old.filedSeq, rule: "law39.transfer" }, // bookkeeping, never rewarded
     }
+    fxActSync(aliasId, "LABEL")
     // plural (A+A): the relic's own claim hands over — the alias row IS the transferred hold,
     // in the relic's old position; other concepts' holds on the word are untouched.
     const l = state.names[old.nameNorm]!

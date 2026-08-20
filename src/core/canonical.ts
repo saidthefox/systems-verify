@@ -68,6 +68,10 @@ function stableForState(v: unknown): unknown {
 /** The hash a checkpoint commits to. Use THIS for pins, never hashOf(state). */
 export const stateHashOf = (state: unknown): string => sha256(JSON.stringify(stableForState(state)))
 export const sha256 = (s: string): string => createHash("sha256").update(s).digest("hex")
+
+/** Fingerprint an ed25519 SPKI key exactly as the sequencer and retired Chain do. */
+export const keyFingerprint = (publicKeyB64: string): string =>
+  createHash("sha256").update(Buffer.from(publicKeyB64, "base64")).digest("hex")
 export const hashOf = (v: unknown): string => sha256(canonical(v))
 
 export const ZERO64 = "0".repeat(64)

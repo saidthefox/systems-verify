@@ -1,9 +1,9 @@
 import type { ActKind, ActState, CoreState, EventEnvelope, Outcome } from "./types"
 import { EDGE_TYPES, RAID_LIVE, claimName, isDead, nameHolders, releaseName, targetKey } from "./types"
-import { hashOf, norm, nameShapeError } from "./canonical"
+import { hashOf, keyFingerprint, norm, nameShapeError, sha256 } from "./canonical"
 import { LIMITS, firstTooLong } from "./limits"
 import { GENESIS_DIALS, dialBig, dialBool, dialNum } from "./dials"
-import { activeJudges, medianActiveRepMilli, quorumCrossing, quorumMinJudges } from "./math"
+import { activeJudges, medianActiveRepMilli, quorumCrossing } from "./math"
 import { beginFx, cascadeEntry, fxStatus, refundMarketVotes, refundOpenStakes, ruleProvisionalAct, takeFx } from "./effects"
 import { instanceAdjacency, ladderVia } from "./graph"
 import {
@@ -155,7 +155,12 @@ export function validate(state: CoreState, e: Pick<EventEnvelope, "kind" | "v" |
       // system that owns it. The kingdom does NOT judge whether it is true — it binds record →
       // signer → time so that lying about it LATER is detectable, which is the entire promise.
       const who = state.actors[e.actor]
-      if (!who) return "unknown attester — register a key before anchoring"
+      if (!who) {
+        const publicKey = str(p, "publicKey")
+        if (!publicKey || keyFingerprint(publicKey) !== e.actor) {
+          return "unknown attester — carry the public key whose fingerprint is the actor"
+        }
+      }
       const actId = str(p, "actId")
       const actHash = str(p, "actHash")
       if (!actId || !actHash) return "actId and actHash required"
@@ -172,6 +177,7 @@ export function validate(state: CoreState, e: Pick<EventEnvelope, "kind" | "v" |
         if (rec.length > LIMITS.ATTESTATION_RECORD) {
           return `record is ${rec.length} bytes; the limit is ${LIMITS.ATTESTATION_RECORD}. Anchor its hash and serve the document, or say it shorter — a clipped record hashes to nothing.`
         }
+        if (sha256(rec) !== actHash) return "record does not hash to actHash"
       }
       return null
     }
@@ -844,8 +850,6 @@ function applyFiling(state: CoreState, e: EventEnvelope, notes: string[]) {
   const p = e.payload
   const kind = p.actKind as ActKind
   const actId = p.actId as string
-  const author = state.actors[e.actor]
-
   // consume the filing slot (A7). The clock advances by whole cadences and NEVER to now, so the
   // sub-cadence remainder is carried rather than discarded — the at-cap reset that once discarded
   // it made the reducer steadily stricter than live (three filings cost twelve votes and a stake).

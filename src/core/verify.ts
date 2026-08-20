@@ -1,6 +1,6 @@
-import { createHash, createPublicKey, verify as edVerify } from "crypto"
+import { createPublicKey, verify as edVerify } from "crypto"
 import type { Candidate, CoreState, EventEnvelope } from "./types"
-import { hashOf, ZERO64 } from "./canonical"
+import { hashOf, keyFingerprint, ZERO64 } from "./canonical"
 import { sigPayload } from "./sequencer"
 import { applyEvent, initState } from "./reducer"
 import { dialNum } from "./dials"
@@ -14,8 +14,7 @@ import { dialNum } from "./dials"
  * puddles, and (optionally) every signature under the keys the log itself registered.
  */
 
-export const fingerprintOf = (publicKeyB64: string): string =>
-  createHash("sha256").update(Buffer.from(publicKeyB64, "base64")).digest("hex")
+export const fingerprintOf = keyFingerprint
 
 export function ed25519Verify(publicKeyB64: string, payload: string, sigB64: string): boolean {
   try {
@@ -27,8 +26,9 @@ export function ed25519Verify(publicKeyB64: string, payload: string, sigB64: str
 }
 
 /** Resolve the public key a candidate must verify under: a registered actor's key, or —
- *  for the self-registering events (HOUSE_FOUNDED, AGENT_MINTED, ENTITY_REGISTERED) — the
- *  key carried in the payload, bound by fingerprint. */
+ *  for self-registering identity events and outside ATTESTATIONs — the key carried in the
+ *  payload, bound by fingerprint. The reducer still decides which kinds may use an unknown
+ *  actor; signature verification grants no standing by itself. */
 function keyFor(state: CoreState, c: Pick<Candidate, "actor" | "payload">): string | null {
   const registered = state.actors[c.actor]?.publicKey
   if (registered) return registered
