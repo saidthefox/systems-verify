@@ -72,6 +72,11 @@ export const sha256 = (s: string): string => createHash("sha256").update(s).dige
 /** Fingerprint an ed25519 SPKI key exactly as the sequencer and retired Chain do. */
 export const keyFingerprint = (publicKeyB64: string): string =>
   createHash("sha256").update(Buffer.from(publicKeyB64, "base64")).digest("hex")
+
+/** One reserved external-fact profile. It is governance's statement about Systema's own retired
+ * infrastructure, so a public guest may not squat its globally unique act id. */
+export const CHAIN_TERMINUS_ACT_ID = "systema-chain-archive-terminus-v1"
+export const CHAIN_TERMINUS_ACT_HASH = "67de9aa2e96de62ad062a941f55fd394f31ba762f319fa9c7d26bf9d587f517e"
 export const hashOf = (v: unknown): string => sha256(canonical(v))
 
 export const ZERO64 = "0".repeat(64)

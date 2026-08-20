@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { join } from "node:path"
 import { fold } from "./src/core/reducer"
 import { verifyLog } from "./src/core/verify"
-import { stateHashOf } from "./src/core/canonical"
+import { CHAIN_TERMINUS_ACT_ID, stateHashOf } from "./src/core/canonical"
 import { stateFromJson } from "./src/codec"
 import type { EventEnvelope } from "./src/core/types"
 
@@ -45,6 +45,25 @@ const sha256 = (b: Buffer | string) => createHash("sha256").update(b).digest("he
 const ok = (s: string) => console.log(`  ✓ ${s}`)
 const bad = (s: string) => console.log(`  ✗ ${s}`)
 const note = (s: string) => console.log(`  · ${s}`)
+
+export function chainTerminusOf(events: EventEnvelope[]): { seq: number; height: number; hash: string; effectiveAt: string } | null {
+  const event = events.find(e => e.kind === "ATTESTATION" && e.payload.actId === CHAIN_TERMINUS_ACT_ID)
+  if (!event || typeof event.payload.record !== "string") return null
+  const record = JSON.parse(event.payload.record) as { terminus?: { height?: unknown; hash?: unknown; effectiveAt?: unknown } }
+  const t = record.terminus
+  if (!t || typeof t.height !== "number" || typeof t.hash !== "string" || typeof t.effectiveAt !== "string") return null
+  return { seq: event.seq, height: t.height, hash: t.hash, effectiveAt: t.effectiveAt }
+}
+
+function reportChainTerminus(events: EventEnvelope[]): void {
+  const t = chainTerminusOf(events)
+  if (!t) {
+    note("the archived systema-chain terminus is not recorded in this prefix")
+    return
+  }
+  ok(`archived systema-chain terminus: block ${t.height}, ${t.hash.slice(0, 16)}…, recorded at log seq ${t.seq}`)
+  note(`the final block timestamp is ${t.effectiveAt}; archive reads remain open, writes are closed`)
+}
 
 /**
  * THE ANCHOR, AS THIS TOOL KNOWS IT — deliberately NOT read from the publisher.
@@ -253,7 +272,10 @@ async function verifyPlainDir(dir: string, opts: { rpcUrl: string | null }): Pro
     bad(`cannot fold this record: ${v.reason}`)
     note("This says the TOOL is out of date, not that the record is bad — update and re-run.")
   } else if (!v.valid) { bad(`INVALID at seq ${v.failedAt}: ${v.reason}`); failures++ }
-  else ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
+  else {
+    ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
+    reportChainTerminus(events)
+  }
 
   console.log("\n3. the anchor")
   const ckDir = join(dir, "checkpoints")
@@ -370,7 +392,10 @@ async function main() {
       note("BUT your copy of the law is NOT the one that computed this record's pin — update this")
       note("tool before reading the line above as a finding about the kingdom.")
     }
-  } else ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
+  } else {
+    ok(`hash chain, puddles, envelope hashes, reducer validity and signatures: ${v.events} events`)
+    reportChainTerminus(events)
+  }
 
   // ── 5. ANCHOR ─────────────────────────────────────────────────────────────
   console.log("\n3. the anchor")

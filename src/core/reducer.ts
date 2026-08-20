@@ -1,6 +1,6 @@
 import type { ActKind, ActState, CoreState, EventEnvelope, Outcome } from "./types"
 import { EDGE_TYPES, RAID_LIVE, claimName, isDead, nameHolders, releaseName, targetKey } from "./types"
-import { hashOf, keyFingerprint, norm, nameShapeError, sha256 } from "./canonical"
+import { CHAIN_TERMINUS_ACT_HASH, CHAIN_TERMINUS_ACT_ID, hashOf, keyFingerprint, norm, nameShapeError, sha256 } from "./canonical"
 import { LIMITS, firstTooLong } from "./limits"
 import { GENESIS_DIALS, dialBig, dialBool, dialNum } from "./dials"
 import { activeJudges, medianActiveRepMilli, quorumCrossing } from "./math"
@@ -154,17 +154,25 @@ export function validate(state: CoreState, e: Pick<EventEnvelope, "kind" | "v" |
       // Amendment 1, as amended 2026-08-18. A fact from OUTSIDE the taxonomy, anchored by the
       // system that owns it. The kingdom does NOT judge whether it is true — it binds record →
       // signer → time so that lying about it LATER is detectable, which is the entire promise.
+      const actId = str(p, "actId")
+      const actHash = str(p, "actHash")
+      if (!actId || !actHash) return "actId and actHash required"
+      if (actId === CHAIN_TERMINUS_ACT_ID && e.actor !== state.keys.governance) {
+        return "the archived Chain terminus is governance's voice alone"
+      }
       const who = state.actors[e.actor]
-      if (!who) {
+      // The reserved terminus is an OFFICE statement like AMENDMENT_RATIFIED, not an economic
+      // actor claiming an outside fact. Signature verification still resolves governance's key.
+      if (!who && actId !== CHAIN_TERMINUS_ACT_ID) {
         const publicKey = str(p, "publicKey")
         if (!publicKey || keyFingerprint(publicKey) !== e.actor) {
           return "unknown attester — carry the public key whose fingerprint is the actor"
         }
       }
-      const actId = str(p, "actId")
-      const actHash = str(p, "actHash")
-      if (!actId || !actHash) return "actId and actHash required"
       if (!/^[0-9a-f]{64}$/.test(actHash)) return "actHash must be a sha256 hex digest of the record"
+      if (actId === CHAIN_TERMINUS_ACT_ID && (actHash !== CHAIN_TERMINUS_ACT_HASH || typeof p.record !== "string")) {
+        return "the archived Chain terminus must carry the exact v1 record"
+      }
       // Globally unique per fact — what made anchoring idempotent on the chain (one block per
       // act) does the same here, so a retry is safe and a re-anchor is a refusal, not a second
       // truth.
